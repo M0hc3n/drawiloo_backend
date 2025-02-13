@@ -1,4 +1,4 @@
-[
+labels = [
     "car (sedan)",
     "crane (machine)",
     "bear (animal)",
