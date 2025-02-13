@@ -4,9 +4,18 @@ from flask_cors import CORS
 
 import base64
 import json
+import random
+
+from src.utils import labels
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+
+
+@app.route("/recommend_label", methods=["GET"])
+def recommend_label():
+    recommended_label = random.choice(labels)
+    return json.dumps({"recommended_label": recommended_label})
 
 
 @app.route("/display_image", methods=["POST"])
