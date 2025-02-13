@@ -6,7 +6,7 @@ import base64
 import json
 import random
 
-from src.utils import labels
+from utils import labels
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
