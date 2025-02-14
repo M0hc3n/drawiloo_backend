@@ -32,8 +32,9 @@ def display_image():
     print(image)
 
     recommended_label = random.choice(labels)
+    confidence = random.uniform(0.6, 1.0)
     return json.dumps(
-        {"correct_label": recommended_label, "success": True, "confidence": 0.6}
+        {"correct_label": recommended_label, "success": True, "confidence": confidence}
     )
 
 
