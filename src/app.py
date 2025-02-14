@@ -8,7 +8,9 @@ import base64
 import json
 import random
 
-from utils import labels
+from utils.labels import labels
+from PIL import Image
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -80,9 +82,16 @@ def display_image():
     data = request.get_json()
     image_data = base64.b64decode(data["image"])
     image = BytesIO(image_data)
+    image = Image.open(image)
+    image = image.resize((255, 255))
+    image = np.array(image)
 
     print(image)
-    return send_file(image, mimetype="image/jpeg")
+
+    recommended_label = random.choice(labels)
+    return json.dumps(
+        {"correct_label": recommended_label, "success": True, "confidence": 0.6}
+    )
 
 if __name__ == "__main__":
     app.run(debug=True)
