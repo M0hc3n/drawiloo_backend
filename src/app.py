@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from utils.ppo_torch import Agent
+from utils.ppo_torch import Agent,DQNAgent
+import numpy as np
 
 import json
 import random
@@ -19,22 +20,60 @@ alpha = 0.0003
 n_epochs = 10
 batch_size = 64
 
-agent = Agent(
-    n_actions=n_actions,
-    input_dims=input_dims,
-    alpha=alpha,
-    n_epochs=n_epochs,
-    batch_size=batch_size,
-)
+# agent = Agent(
+#     n_actions=n_actions,
+#     input_dims=input_dims,
+#     alpha=alpha,
+#     n_epochs=n_epochs,
+#     batch_size=batch_size,
+# )
 
-# Load the trained model checkpoints.
-agent.load_models()
 
+# Make sure your environment is defined somewhere:
+class DrawingAdaptationEnv:
+    def __init__(self):
+        self.current_level = 2
+        self.action_space = type("ActionSpace", (), {"n": 3})
+        self.observation_space = type("ObsSpace", (), {"shape": (3,), "low": np.array([0, 0.0, 0.0]), "high": np.array([9, 1.0, 50.0])})
+        
+    def step(self, action):
+        confidence = np.random.uniform(0, 1)
+        detection_time = np.random.uniform(0, 50)
+        if action == 0:
+            self.current_level = max(0, self.current_level - 1)
+        elif action == 2:
+            self.current_level = min(9, self.current_level + 1)
+        target_confidence = 0.7
+        target_time = 20.0
+        reward = -0.2 * abs(target_time - detection_time) - 0.8 * abs(target_confidence - confidence)
+        if confidence > 0.7 and detection_time < 30 and action == 2:
+            reward = 10
+        elif confidence < 0.5 and detection_time > 20 and action == 0:
+            reward = 10
+        done = False
+        state = np.array([self.current_level, confidence, detection_time], dtype=np.float32)
+        return state, reward, done, {}
+    
+    def reset(self):
+        self.current_level = 2
+        confidence = np.random.uniform(0, 1)
+        detection_time = np.random.uniform(0, 10)
+        return np.array([self.current_level, confidence, detection_time], dtype=np.float32)
+
+
+env = DrawingAdaptationEnv()
+state_size = env.observation_space.shape[0]  
+action_size = env.action_space.n 
+agent = DQNAgent(state_size, action_size)
+
+# Load model
+agent.load_model("/src/utils/tmp/model/dqn_agent_model.h5")
 
 @app.route("/update_proficiency", methods=["POST"])
 def predict():
     data = request.json
     try:
+        current_level = float(data["current_level"])
         confidence = float(data["confidence"])
         detection_time = float(data["time"])
     except (KeyError, ValueError):
@@ -42,11 +81,11 @@ def predict():
             {"error": "Please provide valid 'confidence' and 'time' fields."}
         ), 400
 
-    state = [confidence, detection_time]
+    state = [current_level,confidence, detection_time]
 
-    action, prob, value = agent.choose_action(state)
+    action = agent.act(state)
 
-    return json.dumps({"action": action, "probability": prob, "value": value})
+    return json.dumps({"action": action})
 
 
 @app.route("/recommend_label", methods=["GET"])

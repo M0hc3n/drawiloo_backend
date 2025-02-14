@@ -4,7 +4,13 @@ import torch as T
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
-
+import random
+import tensorflow as tf
+from collections import deque
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Dense, Input
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.losses import MeanSquaredError 
 
 # --- Memory for PPO ---
 class PPOMemory:
@@ -232,3 +238,61 @@ class Agent:
                 self.actor.optimizer.step()
                 self.critic.optimizer.step()
         self.memory.clear_memory()
+
+
+# ---  the DQN Agent ---
+
+# DQN Agent
+class DQNAgent:
+    def __init__(self, state_size, action_size):
+        self.state_size = state_size
+        self.action_size = action_size
+        self.memory = deque(maxlen=2000)
+        self.gamma = 0.95  
+        self.epsilon = 1.0  
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+        self.model = self._build_model()
+
+    def _build_model(self):
+        model = Sequential([
+            Input(shape=(self.state_size,)),  
+            Dense(24, activation='relu'),
+            Dense(24, activation='relu'),
+            Dense(self.action_size, activation='linear')
+        ])
+        model.compile(optimizer=Adam(), loss=MeanSquaredError())  # Use explicit loss
+        return model
+
+    def remember(self, state, action, reward, next_state, done):
+        self.memory.append((state, action, reward, next_state, done))
+
+    def act(self, state):
+        if np.random.rand() <= self.epsilon:
+            return np.random.randint(self.action_size)
+        q_values = self.model.predict(state, verbose=0)
+        return np.argmax(q_values[0])
+
+    def replay(self, batch_size):
+        minibatch = random.sample(self.memory, batch_size)
+        for state, action, reward, next_state, done in minibatch:
+            target = reward if done else reward + self.gamma * np.amax(self.model.predict(next_state, verbose=0)[0])
+            target_f = self.model.predict(state, verbose=0)
+            target_f[0][action] = target
+            self.model.fit(state, target_f, epochs=1, verbose=0)
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def save_model(self, file_name="dqn_agent_model.h5"):
+        """ Saves the model to an H5 file. """
+        self.model.save(file_name)
+        print(f"✅ Model saved as {file_name}")
+
+    def load_model(self, file_name="dqn_agent_model.h5"):
+        """ Loads the model from an H5 file. """
+        # Load the model without compiling
+        self.model = load_model(file_name, compile=False)
+        # Recompile with the explicit loss function
+        self.model.compile(optimizer=Adam(), loss=MeanSquaredError())
+        print(f"✅ Model loaded from {file_name}")
+
