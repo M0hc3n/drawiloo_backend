@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from utils.ppo_torch import Agent,DQNAgent
+from utils.ppo_torch import DQNAgent
 import numpy as np
 
 import json
@@ -20,22 +20,22 @@ alpha = 0.0003
 n_epochs = 10
 batch_size = 64
 
-# agent = Agent(
-#     n_actions=n_actions,
-#     input_dims=input_dims,
-#     alpha=alpha,
-#     n_epochs=n_epochs,
-#     batch_size=batch_size,
-# )
-
 
 # Make sure your environment is defined somewhere:
 class DrawingAdaptationEnv:
     def __init__(self):
         self.current_level = 2
         self.action_space = type("ActionSpace", (), {"n": 3})
-        self.observation_space = type("ObsSpace", (), {"shape": (3,), "low": np.array([0, 0.0, 0.0]), "high": np.array([9, 1.0, 50.0])})
-        
+        self.observation_space = type(
+            "ObsSpace",
+            (),
+            {
+                "shape": (3,),
+                "low": np.array([0, 0.0, 0.0]),
+                "high": np.array([9, 1.0, 50.0]),
+            },
+        )
+
     def step(self, action):
         confidence = np.random.uniform(0, 1)
         detection_time = np.random.uniform(0, 50)
@@ -45,29 +45,36 @@ class DrawingAdaptationEnv:
             self.current_level = min(9, self.current_level + 1)
         target_confidence = 0.7
         target_time = 20.0
-        reward = -0.2 * abs(target_time - detection_time) - 0.8 * abs(target_confidence - confidence)
+        reward = -0.2 * abs(target_time - detection_time) - 0.8 * abs(
+            target_confidence - confidence
+        )
         if confidence > 0.7 and detection_time < 30 and action == 2:
             reward = 10
         elif confidence < 0.5 and detection_time > 20 and action == 0:
             reward = 10
         done = False
-        state = np.array([self.current_level, confidence, detection_time], dtype=np.float32)
+        state = np.array(
+            [self.current_level, confidence, detection_time], dtype=np.float32
+        )
         return state, reward, done, {}
-    
+
     def reset(self):
         self.current_level = 2
         confidence = np.random.uniform(0, 1)
         detection_time = np.random.uniform(0, 10)
-        return np.array([self.current_level, confidence, detection_time], dtype=np.float32)
+        return np.array(
+            [self.current_level, confidence, detection_time], dtype=np.float32
+        )
 
 
 env = DrawingAdaptationEnv()
-state_size = env.observation_space.shape[0]  
-action_size = env.action_space.n 
+state_size = env.observation_space.shape[0]
+action_size = env.action_space.n
 agent = DQNAgent(state_size, action_size)
 
 # Load model
-agent.load_model("/src/utils/tmp/model/dqn_agent_model.h5")
+agent.load_model("src/tmp/model/dqn_agent_model.h5")
+
 
 @app.route("/update_proficiency", methods=["POST"])
 def predict():
@@ -81,7 +88,7 @@ def predict():
             {"error": "Please provide valid 'confidence' and 'time' fields."}
         ), 400
 
-    state = [current_level,confidence, detection_time]
+    state = [current_level, confidence, detection_time]
 
     action = agent.act(state)
 
@@ -112,7 +119,21 @@ def predict_proficiency_for_multiplayer():
 
 @app.route("/recommend_label", methods=["GET"])
 def recommend_label():
-    recommended_label = random.choice(labels)
+    try:
+        user_level = float(request.args.get("level", 1.0))
+    except ValueError:
+        return json.dumps({"error": "Please provide a valid 'level' parameter."}), 400
+
+    suitable_labels = [
+        label for label in labels if abs(label["min_proficiency"] - user_level) <= 1
+    ]
+
+    if not suitable_labels:
+        suitable_labels = labels
+
+    recommended_label = random.choice(suitable_labels)
+    
+    print(recommended_label)
     return json.dumps({"recommended_label": recommended_label["label"]})
 
 
@@ -121,9 +142,7 @@ def predict_drawing():
     try:
         file = request.files["file"]
         prompt = request.form.get("prompt")
-
         image_array = process_drawing(file)
-
         recommended_label, confidence, preds = predict_from_image(image_array)
 
         if prompt == recommended_label["label"]:
