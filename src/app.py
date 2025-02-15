@@ -49,6 +49,28 @@ def predict():
     return json.dumps({"action": action, "probability": prob, "value": value})
 
 
+@app.route("/update_proficiency_for_multiplayer", methods=["POST"])
+def predict_proficiency_for_multiplayer():
+    data = request.json
+    try:
+        detection_time = float(data["time"])
+        currPoints = int(data["currPoint"])
+
+    except (KeyError, ValueError):
+        return json.dumps(
+            {"error": "Please provide valid 'confidence' and 'time' fields."}
+        ), 400
+
+    if detection_time < 10:
+        action = 2
+    elif detection_time < 30:
+        action = 1
+    else:
+        action = 0
+
+    return json.dumps({"action": currPoints + action})
+
+
 @app.route("/recommend_label", methods=["GET"])
 def recommend_label():
     recommended_label = random.choice(labels)
